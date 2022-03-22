@@ -2,7 +2,7 @@
 #include "GadgetFinder.hpp"
 
 // 0 gets the spoofer 1 gets the cryptor
-void* gadgetfinder64(int version, int iteration) {
+void* gadgetfinder64(int version, int iteration, void* bytes, size_t sizeOfBytes) {
 	HMODULE hMods[1024];
 	HANDLE hProcess;
 	DWORD cbNeeded;
@@ -28,6 +28,12 @@ void* gadgetfinder64(int version, int iteration) {
 						//\x59\x5a\x41\x58\x41\x59\xc3
 						//7 Bytes
 						//This is ideal but is it possible?
+						if (version == 2) {
+							if (memcmp(moduleMath + x, bytes, sizeOfBytes) == 0) {
+								void* gadget = (LPVOID)(moduleMath + x);
+								return gadget;
+							}
+						}
 						if (memcmp(moduleMath + x, "\xFF", 1) == 0 && version == 0) {
 							if (memcmp((moduleMath + x + 1), "\x23", 1) == 0) {
 								//printf("Found jmp rbx at %p!\n", moduleMath + x);
@@ -36,6 +42,14 @@ void* gadgetfinder64(int version, int iteration) {
 							}
 						}
 						if (memcmp(moduleMath + x, "\x5a\x59\x41\x58\x41\x59\x41\x5A\x41\x5B\xC3", 11) == 0 && version == 1) {
+							void* gadget = (LPVOID)(moduleMath + x);
+							return gadget;
+						}
+						if (memcmp(moduleMath + x, "\x5a\x59\x41\x58\x41\x59\xC3", 7) == 0 && version == 3) {
+							void* gadget = (LPVOID)(moduleMath + x);
+							return gadget;
+						}
+						if (memcmp(moduleMath + x, "\x41\x59\x41\x58\x5a\x59\x58\xC3", 8) == 0 && version == 4) {
 							void* gadget = (LPVOID)(moduleMath + x);
 							return gadget;
 						}

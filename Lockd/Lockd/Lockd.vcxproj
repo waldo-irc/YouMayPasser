@@ -232,6 +232,7 @@
       <ExceptionHandling>Sync</ExceptionHandling>
       <AdditionalIncludeDirectories>../include;..;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -271,6 +272,7 @@
       <ConformanceMode>true</ConformanceMode>
       <AdditionalIncludeDirectories>../;../include;</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -281,6 +283,8 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="..\include\syscall.cpp" />
+    <ClCompile Include="..\include\utils.cpp" />
     <ClCompile Include="CContextHook.cpp" />
     <ClCompile Include="GadgetFinder.cpp" />
     <ClCompile Include="Random.cpp" />

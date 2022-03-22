@@ -79,7 +79,6 @@ bool CContextHook::InitiateContext(Handler_t ContextHandler, Context_t* C, BOOL 
 	}
 	if (pHandler == NULL)
 		return false;
-	m_pHandler = pHandler;
 	CONTEXT c;
 
 	c.ContextFlags = CONTEXT_DEBUG_REGISTERS;

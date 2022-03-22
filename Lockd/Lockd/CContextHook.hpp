@@ -38,18 +38,18 @@ public:
 	bool	  ClearContext(void);
 	Context_t* GetContextInfo(void);
 	Handler_t   GetHandlerInfo(void);
-	HANDLE   GetMasterThread(void);
 
 private:
 
 	bool   IsReady(DWORD64* H);
 	HANDLE   GetMainThread(void);
+	HANDLE   GetMasterThread(void);
 
 private:
 
 	Context_t   m_Context;
 	Handler_t   m_Handler;
-	PVOID	  m_pHandler;
+
 };
 
 extern CContextHook GContextHook;
