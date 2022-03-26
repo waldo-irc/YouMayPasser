@@ -25,3 +25,8 @@ Below are a list of current IOCs
 - The SetThreadContext injection leveraged to spoof the start address is in itself suspicious as these calls are often only used by debuggers
 
 #### I will fix none of these issues.  This is nothing more than an x64 gargoyle POC to demonstrate how it can be leveraged to bypass PeSieve and Moneta.
+
+#### shoutouts
+1. Ret address spoofing - Namaszo (https://www.unknowncheats.me/forum/anti-cheat-bypass/268039-x64-return-address-spoofing-source-explanation.html)
+2. Timer sleep - computerBeat (https://blat-blatnik.github.io/computerBear/making-accurate-sleep-function/)
+3. VEH Hooks - CheatEngine Forums https://www.cheatengine.org/forum/viewtopic.php?t=610689&sid=c329059fbe5c36ef296bce5ef72decfc
