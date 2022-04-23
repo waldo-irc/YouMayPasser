@@ -1,6 +1,8 @@
 # Summary
 YouMayPasser is an x64 implementation of Gargoyle (https://github.com/JLospinoso/gargoyle)
 
+BLOG POST HERE: https://www.arashparsa.com/bypassing-pesieve-and-moneta-the-easiest-way-i-could-find/
+
 It contains several parts.
 
 - Lockd: This is the main Gargoyle component
