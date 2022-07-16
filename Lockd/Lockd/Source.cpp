@@ -174,12 +174,6 @@ LPVOID HookedVirtualAlloc(LPVOID lpAddress, SIZE_T dwSize, DWORD flAllocationTyp
 // Hooked ExitProcess
 // We do full cleanup and then a thread exit.
 void WINAPI HookedExitProcess(DWORD dwExitCode) {
-	// On DLL Hijack Loop forever so we dont exit main thread
-	if (GetCurrentThreadId() == masterThreadID) {
-		GContextHookM.ClearContext();
-		while (TRUE);
-	}
-
 	GContextHook.ClearContext();
 	RemoveVectoredExceptionHandler(pHandler);
 	CloseHandle(ghMutex);
